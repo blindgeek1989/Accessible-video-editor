@@ -9,11 +9,18 @@
   <script>
     // Register the Cross-Origin Isolation service worker so SharedArrayBuffer
     // (required by FFmpeg WASM) works on GitHub Pages.
-    // The page reloads once after first registration — this is expected.
+    // The page may reload once — this is expected.
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./coi-serviceworker.js').then(function (reg) {
-        if (!window.crossOriginIsolated && (reg.installing || reg.waiting)) {
-          window.location.reload();
+        if (!window.crossOriginIsolated) {
+          // SW is still installing or waiting for an old version to close
+          if (reg.installing || reg.waiting) {
+            window.location.reload();
+          // SW activated (via skipWaiting) but hasn't claimed this page yet —
+          // happens when skipWaiting fires before the registration promise resolves
+          } else if (reg.active && !navigator.serviceWorker.controller) {
+            window.location.reload();
+          }
         }
       }).catch(function (err) {
         console.warn('COI Service Worker registration failed:', err);

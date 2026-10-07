@@ -39,10 +39,15 @@ const FFmpegHandler = (function () {
       });
 
       onStatus('Initialising FFmpeg core…');
-      const coreBase = `${CDN}/@ffmpeg/core@${VER.core}/dist/umd`;
-      const coreURL  = await toBlobURL(`${coreBase}/ffmpeg-core.js`,   'text/javascript');
-      const wasmURL  = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm');
-      await ffmpeg.load({ coreURL, wasmURL });
+      // All three URLs must be blob URLs so the Worker constructor and WASM
+      // loader work under Cross-Origin-Embedder-Policy (cross-origin classic
+      // Workers are blocked even with CORS headers when COEP is active).
+      const ffmpegBase = `${CDN}/@ffmpeg/ffmpeg@${VER.ffmpeg}/dist/esm`;
+      const coreBase   = `${CDN}/@ffmpeg/core@${VER.core}/dist/umd`;
+      const workerURL  = await toBlobURL(`${ffmpegBase}/worker.js`,        'text/javascript');
+      const coreURL    = await toBlobURL(`${coreBase}/ffmpeg-core.js`,     'text/javascript');
+      const wasmURL    = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`,   'application/wasm');
+      await ffmpeg.load({ coreURL, wasmURL, workerURL });
 
       isLoaded = true;
       onStatus('FFmpeg ready.');
