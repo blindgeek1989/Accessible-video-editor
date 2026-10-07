@@ -24,7 +24,7 @@ Built for blind and low-vision creators who want to clip, caption, and share soc
 
 ### Step 1: Open the app
 
-Open the app on [GitHub Pages](#) (replace with your Pages URL) or run it locally — see [Local Development](#local-development) below.
+Open the app on [GitHub Pages](https://blindgeek1989.github.io/Accessible-video-editor/) or run it locally — see [Local Development](#local-development) below.
 
 > **Important:** The app needs a web server to work. Opening `index.html` directly from your desktop (via `file://`) will prevent FFmpeg from loading due to browser security restrictions.
 
