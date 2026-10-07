@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Accessible video editor — clip, caption, and add voiceover to video entirely in your browser. Optimised for screen reader users." />
+  <title>Accessible Video Editor</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <script>
+    // Register the Cross-Origin Isolation service worker so SharedArrayBuffer
+    // (required by FFmpeg WASM) works on GitHub Pages.
+    // The page reloads once after first registration — this is expected.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./coi-serviceworker.js').then(function (reg) {
+        if (!window.crossOriginIsolated && (reg.installing || reg.waiting)) {
+          window.location.reload();
+        }
+      }).catch(function (err) {
+        console.warn('COI Service Worker registration failed:', err);
+      });
+    }
+  </script>
+</head>
+<body>
+
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header role="banner">
+    <h1>Accessible Video Editor</h1>
+    <p class="tagline">Create, clip, caption, and share — independently.</p>
+  </header>
+
+  <main id="main-content" role="main">
+
+    <!-- SR step-reveal announcer (polite, so it doesn't interrupt current reading) -->
+    <div id="step-announce" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+
+    <!-- Shown if SharedArrayBuffer / cross-origin isolation is unavailable -->
+    <div id="coi-warning" role="alert" class="alert-banner" hidden>
+      <strong>Warning: video processing may not work in this context.</strong>
+      FFmpeg requires cross-origin isolation, which needs a web server.
+      If you opened this file directly from your desktop (file://), please serve it locally:
+      run <code>npx serve .</code> in this folder, or open the app from GitHub Pages.
+      If you are on GitHub Pages and see this message, try a hard refresh
+      (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> on Windows or <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> on Mac).
+    </div>
+
+    <!-- Step 1: Load Video -->
+    <section aria-labelledby="load-heading">
+      <h2 id="load-heading">Step 1: Load Video</h2>
+      <div class="field-group">
+        <label for="video-file-input">Choose a video file (MP4, MOV, AVI, WebM):</label>
+        <input
+          type="file"
+          id="video-file-input"
+          accept="video/*"
+          aria-describedby="file-hint"
+        />
+        <p id="file-hint" class="hint">Accepted formats: MP4, MOV, AVI, WebM. File is processed locally in your browser.</p>
+      </div>
+      <div id="file-status" role="status" aria-live="polite" aria-atomic="true" class="status-message"></div>
+    </section>
+
+    <!-- Step 2: Playback & Markers -->
+    <section aria-labelledby="playback-heading" id="playback-section" hidden>
+      <h2 id="playback-heading">Step 2: Play and Mark Key Moments</h2>
+
+      <div class="video-container" aria-hidden="true">
+        <video id="video-player" preload="metadata" tabindex="-1">
+          <p>Your browser does not support the video element.</p>
+        </video>
+      </div>
+
+      <!-- Playback controls -->
+      <div class="controls" role="group" aria-labelledby="controls-heading">
+        <h3 id="controls-heading" class="sr-only">Playback Controls</h3>
+        <button id="btn-play-pause" aria-label="Play">Play</button>
+        <button id="btn-skip-back" aria-label="Skip back 5 seconds">-5s</button>
+        <button id="btn-skip-forward" aria-label="Skip forward 5 seconds">+5s</button>
+        <div class="time-display">
+          <span class="sr-only">Current time:</span>
+          <span id="current-time" aria-live="off">0:00</span>
+          <span aria-hidden="true"> / </span>
+          <span class="sr-only">Duration:</span>
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+
+      <!-- Volume -->
+      <div class="field-group">
+        <label for="volume-control">Volume:</label>
+        <input
+          type="range"
+          id="volume-control"
+          min="0"
+          max="1"
+          step="0.05"
+          value="1"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="100"
+          aria-valuetext="100 percent"
+        />
+      </div>
+
+      <!-- Keyboard reference -->
+      <details id="keyboard-help">
+        <summary>Keyboard Shortcuts</summary>
+        <h4>Playback (works when focus is not inside a text field)</h4>
+        <ul>
+          <li><kbd>Space</kbd> — Play / Pause</li>
+          <li><kbd>Left Arrow</kbd> — Skip back 5 seconds</li>
+          <li><kbd>Right Arrow</kbd> — Skip forward 5 seconds</li>
+          <li><kbd>Up Arrow</kbd> — Volume up</li>
+          <li><kbd>Down Arrow</kbd> — Volume down</li>
+          <li><kbd>M</kbd> — Drop a marker at the current playback time</li>
+          <li><kbd>I</kbd> — Set In point from the currently selected marker</li>
+          <li><kbd>O</kbd> — Set Out point from the currently selected marker</li>
+        </ul>
+        <h4>Marker list (when focus is inside the list)</h4>
+        <ul>
+          <li><kbd>Up / Down Arrow</kbd> — Move between markers</li>
+          <li><kbd>Enter</kbd> or <kbd>Space</kbd> — Select marker and jump to its time</li>
+          <li><kbd>Delete</kbd> or <kbd>Backspace</kbd> — Delete the focused marker</li>
+          <li><kbd>Home</kbd> / <kbd>End</kbd> — Jump to first / last marker</li>
+          <li><kbd>I</kbd> / <kbd>O</kbd> — Set In / Out point from the focused marker</li>
+        </ul>
+      </details>
+
+      <!-- Marker controls -->
+      <div class="field-group">
+        <label for="marker-name-input">Marker label (optional):</label>
+        <input
+          type="text"
+          id="marker-name-input"
+          placeholder="e.g. Good intro, Key point"
+          aria-describedby="marker-hint"
+        />
+        <p id="marker-hint" class="hint">Press M or the Drop Marker button to save a marker at the current time with this label.</p>
+        <button id="btn-drop-marker">Drop Marker (M)</button>
+      </div>
+
+      <!-- Marker list -->
+      <div id="marker-list-container">
+        <h3 id="marker-list-heading">Markers</h3>
+        <p id="no-markers-message">No markers yet. Play the video and press M to drop a marker.</p>
+        <ul
+          id="marker-list"
+          role="listbox"
+          aria-labelledby="marker-list-heading"
+          aria-multiselectable="false"
+          tabindex="0"
+          hidden
+        ></ul>
+      </div>
+
+      <!-- Status for marker actions -->
+      <div id="marker-status" role="status" aria-live="polite" aria-atomic="true" class="status-message"></div>
+
+      <!-- In / Out selection -->
+      <fieldset id="clip-range-fieldset" hidden>
+        <legend>Clip Range</legend>
+        <div class="field-group">
+          <label for="in-point-display">In point:</label>
+          <input type="text" id="in-point-display" readonly aria-describedby="in-hint" />
+          <p id="in-hint" class="hint">Select a marker in the list above, then press I to set it as your in point.</p>
+        </div>
+        <div class="field-group">
+          <label for="out-point-display">Out point:</label>
+          <input type="text" id="out-point-display" readonly aria-describedby="out-hint" />
+          <p id="out-hint" class="hint">Select a marker in the list above, then press O to set it as your out point.</p>
+        </div>
+        <div id="clip-duration-display" role="status" aria-live="polite" aria-atomic="true" class="status-message"></div>
+        <button id="btn-confirm-clip" hidden>Confirm Clip Selection</button>
+      </fieldset>
+
+    </section>
+
+    <!-- Step 3: Process Clip -->
+    <section aria-labelledby="process-heading" id="process-section" hidden>
+      <h2 id="process-heading">Step 3: Process Clip</h2>
+
+      <p id="clip-summary" class="status-message"></p>
+
+      <div class="field-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="convert-portrait" />
+          Convert landscape video to portrait (9:16 with blurred background)
+        </label>
+        <p class="hint">Recommended for LinkedIn, Instagram Reels, and TikTok.</p>
+      </div>
+
+      <button id="btn-process-clip">Process Clip</button>
+
+      <!-- Progress bar (hidden until processing starts) -->
+      <div id="progress-container" hidden>
+        <div
+          id="progress-bar"
+          role="progressbar"
+          aria-valuenow="0"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuetext="0 percent"
+          aria-label="Video processing progress"
+        >
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="process-status" role="status" aria-live="assertive" aria-atomic="true" class="status-message"></div>
+
+      <!-- Download (hidden until clip is ready) -->
+      <div id="download-container" hidden>
+        <p class="status-message success-message">Your clip is ready!</p>
+        <a id="download-link" href="#" download="clip.mp4" class="btn-download">Download Clip (MP4)</a>
+        <button id="btn-process-another" class="secondary">Process Another Clip</button>
+      </div>
+    </section>
+
+    <!-- Step 4: Transcribe -->
+    <section aria-labelledby="transcribe-heading" id="transcribe-section" hidden>
+      <h2 id="transcribe-heading">Step 4: Transcribe Clip</h2>
+
+      <div class="field-group">
+        <label for="whisper-model">Whisper model:</label>
+        <select id="whisper-model" aria-describedby="model-hint">
+          <option value="Xenova/whisper-tiny.en">Tiny — English only (~75 MB, fastest)</option>
+          <option value="Xenova/whisper-base.en" selected>Base — English only (~145 MB, recommended)</option>
+          <option value="Xenova/whisper-small">Small — multilingual (~466 MB, most accurate)</option>
+        </select>
+        <p id="model-hint" class="hint">Models are cached in your browser after the first download. Larger models are more accurate but slower.</p>
+      </div>
+
+      <div class="field-group">
+        <label for="whisper-language">Language:</label>
+        <input type="text" id="whisper-language" value="english" aria-describedby="lang-hint" />
+        <p id="lang-hint" class="hint">Spoken language in the clip (e.g., english, spanish, french). Type "auto" for automatic detection. Ignored by the English-only Tiny and Base models.</p>
+      </div>
+
+      <button id="btn-transcribe">Transcribe Clip</button>
+
+      <div id="transcribe-progress-container" hidden>
+        <div
+          id="transcribe-progress-bar"
+          role="progressbar"
+          aria-valuenow="0"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuetext="0 percent"
+          aria-label="Transcription progress"
+        >
+          <div id="transcribe-progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="transcribe-status" role="status" aria-live="assertive" aria-atomic="true" class="status-message"></div>
+
+      <!-- Editable transcript (revealed after transcription) -->
+      <div id="transcript-editor" hidden>
+        <h3 id="transcript-editor-heading" tabindex="-1">Review and Edit Transcript</h3>
+        <p class="hint">Edit the caption text for each segment. Adjust Start and End times (in seconds) if Whisper's timing is off.</p>
+
+        <div id="transcript-segments" role="list" aria-labelledby="transcript-editor-heading"></div>
+
+        <div class="transcript-actions" role="group" aria-label="Transcript export and continue">
+          <button id="btn-export-srt">Export SRT File</button>
+          <button id="btn-export-vtt" class="secondary">Export VTT File</button>
+          <button id="btn-transcript-ready" class="secondary">Transcript Ready — Continue to Captions</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 5: Captions and Voiceover -->
+    <section aria-labelledby="finalise-heading" id="finalise-section" hidden>
+      <h2 id="finalise-heading" tabindex="-1">Step 5: Add Captions and Voiceover</h2>
+
+      <!-- Captions -->
+      <fieldset id="captions-fieldset">
+        <legend>Captions</legend>
+        <p id="caption-availability" class="hint">Complete Step 4 to enable caption burning.</p>
+        <label class="checkbox-label">
+          <input type="checkbox" id="burn-captions" disabled aria-describedby="caption-availability" aria-controls="caption-style-options" />
+          Burn captions into video
+        </label>
+        <div id="caption-style-options" class="sub-options" hidden>
+          <div class="field-group">
+            <label for="caption-font-size">Font size (pixels):</label>
+            <input type="number" id="caption-font-size" value="24" min="12" max="72" step="2" class="input-narrow" />
+          </div>
+          <div class="field-group">
+            <label for="caption-position">Caption position:</label>
+            <select id="caption-position">
+              <option value="bottom" selected>Bottom of frame</option>
+              <option value="top">Top of frame</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Voiceover -->
+      <fieldset id="voiceover-fieldset">
+        <legend>Voiceover</legend>
+        <label class="checkbox-label">
+          <input type="checkbox" id="add-voiceover" aria-controls="voiceover-options" />
+          Add voiceover to clip
+        </label>
+        <div id="voiceover-options" class="sub-options" hidden>
+
+          <div class="field-group">
+            <p class="field-label" id="vo-source-heading">Voiceover source:</p>
+            <label class="radio-label">
+              <input type="radio" name="vo-source" id="vo-source-record" value="record" checked />
+              Record using microphone
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="vo-source" id="vo-source-upload" value="upload" />
+              Upload audio file
+            </label>
+          </div>
+
+          <!-- Recording controls -->
+          <div id="recording-panel">
+            <div class="recording-controls" role="group" aria-label="Microphone recording controls">
+              <button id="btn-start-record">Start Recording</button>
+              <button id="btn-stop-record" disabled>Stop Recording</button>
+              <button id="btn-discard-record" hidden class="secondary">Discard Recording</button>
+              <span id="rec-timer" class="rec-timer" aria-hidden="true">0:00</span>
+            </div>
+            <div id="rec-status" role="status" aria-live="polite" aria-atomic="true" class="status-message"></div>
+            <div id="recorded-preview" hidden>
+              <p class="hint">Preview your recording before using it:</p>
+              <audio id="recorded-audio" controls aria-label="Recorded voiceover preview"></audio>
+            </div>
+          </div>
+
+          <!-- Upload audio -->
+          <div id="upload-panel" hidden>
+            <div class="field-group">
+              <label for="voiceover-file">Upload audio file:</label>
+              <input type="file" id="voiceover-file" accept="audio/*" aria-describedby="vo-file-hint" />
+              <p id="vo-file-hint" class="hint">Accepted: MP3, WAV, AAC, OGG, WebM audio.</p>
+            </div>
+            <div id="upload-audio-status" role="status" aria-live="polite" class="status-message"></div>
+          </div>
+
+          <!-- Audio mode -->
+          <fieldset id="audio-mode-fieldset">
+            <legend>Audio mode:</legend>
+            <label class="radio-label">
+              <input type="radio" name="audio-mode" id="audio-mode-replace" value="replace" checked />
+              Replace original audio with voiceover
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="audio-mode" id="audio-mode-mix" value="mix" />
+              Mix voiceover with original audio
+            </label>
+          </fieldset>
+
+        </div>
+      </fieldset>
+
+      <button id="btn-finalise">Create Final Video</button>
+
+      <div id="finalise-progress-container" hidden>
+        <div
+          id="finalise-progress-bar"
+          role="progressbar"
+          aria-valuenow="0"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuetext="0 percent"
+          aria-label="Final video creation progress"
+        >
+          <div id="finalise-progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="finalise-status" role="status" aria-live="assertive" aria-atomic="true" class="status-message"></div>
+
+      <div id="final-download-container" hidden>
+        <p class="status-message success-message">Your final video is ready!</p>
+        <a id="final-download-link" href="#" download="final.mp4" class="btn-download">Download Final Video (MP4)</a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer role="contentinfo">
+    <p>Accessible Video Editor — all processing happens locally in your browser. No video is uploaded.</p>
+  </footer>
+
+  <script src="js/marker-manager.js"></script>
+  <script src="js/ffmpeg-handler.js"></script>
+  <script src="js/whisper-handler.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
