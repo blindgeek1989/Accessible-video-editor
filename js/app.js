@@ -91,6 +91,18 @@
   const stepAnnounce = document.getElementById('step-announce');
   const coiWarning   = document.getElementById('coi-warning');
 
+  // ── DOM refs — Navigation Guide ───────────────────────────
+  const navguideSection    = document.getElementById('navguide-section');
+  const anthropicKeyInput  = document.getElementById('anthropic-key');
+  const frameIntervalSel   = document.getElementById('frame-interval');
+  const btnGenerateGuide   = document.getElementById('btn-generate-guide');
+  const navguideProgressCt = document.getElementById('navguide-progress-container');
+  const navguideProgressBar= document.getElementById('navguide-progress-bar');
+  const navguideProgressFil= document.getElementById('navguide-progress-fill');
+  const navguideStatus     = document.getElementById('navguide-status');
+  const navguideResults    = document.getElementById('navguide-results');
+  const navguideList       = document.getElementById('navguide-list');
+
   // ── State ─────────────────────────────────────────────────
   const markers = new MarkerManager();
   let selectedMarkerId    = null;
@@ -136,6 +148,138 @@
   }
 
   // ══════════════════════════════════════════════════════════
+  // NAVIGATION GUIDE
+  // ══════════════════════════════════════════════════════════
+
+  function formatTimeVerbose(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}m ${sec}s`;
+  }
+
+  function addNavguideEntry(entry) {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
+    li.setAttribute('data-time', entry.time);
+    li.tabIndex = -1;
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'navguide-time';
+    timeSpan.textContent = formatTime(entry.time);
+    timeSpan.setAttribute('aria-hidden', 'true');
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'navguide-text';
+    textSpan.textContent = entry.text;
+
+    // Screen reader reads: "0:10 — [description]. Press Enter to seek."
+    li.setAttribute('aria-label', `${formatTimeVerbose(entry.time)}: ${entry.text}`);
+
+    li.appendChild(timeSpan);
+    li.appendChild(textSpan);
+
+    li.addEventListener('click', function () { activateNavguideItem(li); });
+    li.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault(); e.stopPropagation();
+        activateNavguideItem(li);
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault(); e.stopPropagation();
+        const next = li.nextElementSibling;
+        if (next) next.focus();
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopPropagation();
+        const prev = li.previousElementSibling;
+        if (prev) prev.focus();
+      }
+      if (e.key === 'Home') {
+        e.preventDefault(); e.stopPropagation();
+        const first = navguideList.querySelector('li[role="option"]');
+        if (first) first.focus();
+      }
+      if (e.key === 'End') {
+        e.preventDefault(); e.stopPropagation();
+        const items = navguideList.querySelectorAll('li[role="option"]');
+        if (items.length) items[items.length - 1].focus();
+      }
+    });
+
+    navguideList.appendChild(li);
+  }
+
+  function activateNavguideItem(li) {
+    navguideList.querySelectorAll('li[role="option"]').forEach(function (el) {
+      el.setAttribute('aria-selected', el === li ? 'true' : 'false');
+    });
+    const t = parseFloat(li.getAttribute('data-time'));
+    videoPlayer.currentTime = t;
+    announce(markerStatus, `Seeked to ${formatTime(t)}.`, 1500);
+    li.focus();
+  }
+
+  // Delegate focus into first item when the listbox receives Tab focus
+  navguideList.addEventListener('focus', function () {
+    const first = navguideList.querySelector('li[role="option"]');
+    if (first) first.focus();
+  });
+
+  btnGenerateGuide.addEventListener('click', async function () {
+    const key = anthropicKeyInput.value.trim();
+    if (!key) {
+      announce(navguideStatus, 'Please enter your Anthropic API key first.');
+      anthropicKeyInput.focus();
+      return;
+    }
+    if (!currentVideoFile) {
+      announce(navguideStatus, 'Load a video first.');
+      return;
+    }
+
+    DescriptionHandler.setApiKey(key);
+
+    btnGenerateGuide.disabled = true;
+    navguideProgressCt.hidden = false;
+    navguideResults.hidden    = false;
+    navguideList.innerHTML    = '';
+    setProgress(navguideProgressFil, navguideProgressBar, 0);
+    announce(navguideStatus, 'Generating descriptions — descriptions will appear below as they arrive.');
+
+    const interval   = parseInt(frameIntervalSel.value, 10) || 10;
+    const duration   = videoPlayer.duration;
+    const totalFrames = Math.ceil(duration / interval);
+
+    try {
+      await DescriptionHandler.generateGuide(videoPlayer, {
+        intervalSeconds: interval,
+        onProgress: function (done, total) {
+          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+          setProgress(navguideProgressFil, navguideProgressBar, pct);
+          announce(navguideStatus, `Describing frame ${done + 1} of ${total}…`);
+        },
+        onEntry: function (entry) {
+          addNavguideEntry(entry);
+          // Focus the first entry so the user can start navigating immediately
+          if (navguideList.querySelectorAll('li').length === 1) {
+            navguideList.querySelector('li').focus();
+          }
+        },
+      });
+
+      setProgress(navguideProgressFil, navguideProgressBar, 100);
+      announce(navguideStatus, `Done. ${navguideList.querySelectorAll('li').length} entries. Use arrow keys to navigate the list, Enter or Space to seek.`);
+
+    } catch (err) {
+      announce(navguideStatus, `Error: ${err.message}`);
+      navguideProgressCt.hidden = true;
+    } finally {
+      btnGenerateGuide.disabled = false;
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════
   // PHASE 1
   // ══════════════════════════════════════════════════════════
 
@@ -150,6 +294,7 @@
     videoPlayer.addEventListener('loadedmetadata', function onMeta() {
       videoPlayer.removeEventListener('loadedmetadata', onMeta);
       durationEl.textContent = formatTime(videoPlayer.duration);
+      navguideSection.hidden = false;
       playbackSection.hidden = false;
       announce(fileStatus, `${file.name} loaded. Duration: ${formatTime(videoPlayer.duration)}. Move to Step 2 to begin.`);
       btnPlayPause.focus();
@@ -162,6 +307,10 @@
       clipDurationDisplay.textContent = '';
       clipRangeFieldset.hidden = true; btnConfirmClip.hidden = true;
       processSection.hidden = true; transcribeSection.hidden = true; finaliseSection.hidden = true;
+      // Reset navigation guide
+      navguideProgressCt.hidden = true; navguideResults.hidden = true;
+      navguideList.innerHTML = ''; navguideStatus.textContent = '';
+      setProgress(navguideProgressFil, navguideProgressBar, 0);
     });
 
     videoPlayer.addEventListener('error', function onErr() {

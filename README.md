@@ -16,6 +16,7 @@ Built for blind and low-vision creators who want to clip, caption, and share soc
 - **Burned-in captions** — drawn using FFmpeg's drawtext filter
 - **SRT / VTT export** — download a subtitle file for any platform
 - **Voiceover** — record from your microphone or upload an audio file; replace or mix with the original audio
+- **Navigation guide** — sample frames at regular intervals and get visual descriptions via Claude Haiku, so you know what is on screen at each point before dropping markers
 - **Screen reader optimised** — tested with JAWS, NVDA (Windows), and VoiceOver (Mac)
 
 ---
@@ -33,6 +34,22 @@ Open the app on [GitHub Pages](https://blindgeek1989.github.io/Accessible-video-
 ### Step 2: Load a video
 
 Choose an MP4, MOV, AVI, or WebM file using the file picker. The file stays on your device and is never uploaded anywhere.
+
+---
+
+### Step 2b: Generate a Navigation Guide (optional)
+
+After loading your video, a **Navigation Guide** section appears above the playback controls. This samples frames at regular intervals and calls Claude Haiku to describe what is visible in each one — so you know what is on screen at every point before dropping markers.
+
+You will need your **Anthropic API key** (enter it in the text box — it is held in memory only and never saved to disk).
+
+1. Enter your Anthropic API key.
+2. Choose how often to describe a frame. 10 seconds is a good starting point.
+3. Press **Generate Navigation Guide**.
+
+Descriptions appear in the list as they arrive. Use arrow keys to move between entries, and press **Enter** or **Space** to seek the video to that timestamp.
+
+> Approximate cost: a 5-minute video at 10-second intervals makes around 30 API calls to Claude Haiku — roughly $0.01 USD total.
 
 ---
 

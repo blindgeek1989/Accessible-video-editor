@@ -175,6 +175,7 @@ label {
 
 input[type="file"],
 input[type="text"],
+input[type="password"],
 input[type="range"] {
   background-color: var(--color-surface-raised);
   border: 1px solid var(--color-border);
@@ -803,11 +804,13 @@ audio {
 /* ============================================================
    Phase 4 — Extra progress bars (transcribe + finalise)
    ============================================================ */
+#navguide-progress-container,
 #transcribe-progress-container,
 #finalise-progress-container {
   margin: var(--spacing-md) 0;
 }
 
+#navguide-progress-bar,
 #transcribe-progress-bar,
 #finalise-progress-bar {
   background-color: var(--color-surface-raised);
@@ -816,6 +819,60 @@ audio {
   height: 1.5rem;
   overflow: hidden;
   position: relative;
+}
+
+/* ============================================================
+   Navigation Guide — description list
+   ============================================================ */
+#navguide-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+#navguide-list li[role="option"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  background-color: var(--color-surface-raised);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+#navguide-list li[role="option"]:hover {
+  border-color: var(--color-accent);
+}
+
+#navguide-list li[role="option"][aria-selected="true"],
+#navguide-list li[role="option"]:focus {
+  background-color: #1a3a5c;
+  border-color: var(--color-accent);
+  outline: var(--focus-outline);
+  outline-offset: -3px;
+}
+
+.navguide-time {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--color-accent);
+  flex-shrink: 0;
+  min-width: 3.5ch;
+}
+
+.navguide-text {
+  flex-grow: 1;
+  color: var(--color-text);
 }
 
 /* ============================================================

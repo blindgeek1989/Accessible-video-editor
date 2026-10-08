@@ -68,6 +68,61 @@
       <div id="file-status" role="status" aria-live="polite" aria-atomic="true" class="status-message"></div>
     </section>
 
+    <!-- Navigation Guide: visual frame descriptions (shown when video loads) -->
+    <section aria-labelledby="navguide-heading" id="navguide-section" hidden>
+      <h2 id="navguide-heading">Navigation Guide (Optional)</h2>
+      <p class="hint">Get a visual description of your video frame by frame to help you find cut points. Uses Claude Haiku via the Anthropic API.</p>
+
+      <div class="field-group">
+        <label for="anthropic-key">Anthropic API key:</label>
+        <input type="password" id="anthropic-key" autocomplete="off" spellcheck="false"
+               placeholder="sk-ant-api03-…" aria-describedby="apikey-hint" />
+        <p id="apikey-hint" class="hint">Held in memory only for this session — never saved to disk or sent anywhere except api.anthropic.com.</p>
+      </div>
+
+      <div class="field-group">
+        <label for="frame-interval">Describe a frame every:</label>
+        <select id="frame-interval">
+          <option value="5">5 seconds</option>
+          <option value="10" selected>10 seconds</option>
+          <option value="15">15 seconds</option>
+          <option value="30">30 seconds</option>
+        </select>
+        <p class="hint">Fewer seconds gives more detail but makes more API calls. 10 seconds is a good starting point.</p>
+      </div>
+
+      <button id="btn-generate-guide">Generate Navigation Guide</button>
+
+      <div id="navguide-progress-container" hidden>
+        <div
+          id="navguide-progress-bar"
+          role="progressbar"
+          aria-valuenow="0"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuetext="0 percent"
+          aria-label="Navigation guide generation progress"
+        >
+          <div id="navguide-progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="navguide-status" role="status" aria-live="polite" aria-atomic="true" class="status-message"></div>
+
+      <div id="navguide-results" hidden>
+        <h3 id="navguide-list-heading">Video Descriptions</h3>
+        <p id="navguide-list-hint" class="hint">Arrow keys to move between entries. Enter or Space to seek the video to that timestamp.</p>
+        <ul
+          id="navguide-list"
+          role="listbox"
+          aria-labelledby="navguide-list-heading"
+          aria-describedby="navguide-list-hint"
+          aria-multiselectable="false"
+          tabindex="0"
+        ></ul>
+      </div>
+    </section>
+
     <!-- Step 2: Playback & Markers -->
     <section aria-labelledby="playback-heading" id="playback-section" hidden>
       <h2 id="playback-heading">Step 2: Play and Mark Key Moments</h2>
@@ -399,6 +454,7 @@
   <script src="js/marker-manager.js"></script>
   <script src="js/ffmpeg-handler.js"></script>
   <script src="js/whisper-handler.js"></script>
+  <script src="js/description-handler.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
