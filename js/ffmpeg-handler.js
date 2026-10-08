@@ -8,7 +8,7 @@ const FFmpegHandler = (function () {
   'use strict';
 
   const CDN = 'https://cdn.jsdelivr.net/npm';
-  const VER = { ffmpeg: '0.12.7', util: '0.12.1', core: '0.12.4' };
+  const VER = { ffmpeg: '0.12.10', util: '0.12.1', core: '0.12.6' };
 
   let ffmpeg        = null;
   let fetchFile     = null;
@@ -39,15 +39,17 @@ const FFmpegHandler = (function () {
       });
 
       onStatus('Initialising FFmpeg core…');
-      // All three URLs must be blob URLs so the Worker constructor and WASM
-      // loader work under Cross-Origin-Embedder-Policy (cross-origin classic
-      // Workers are blocked even with CORS headers when COEP is active).
-      const ffmpegBase = `${CDN}/@ffmpeg/ffmpeg@${VER.ffmpeg}/dist/esm`;
-      const coreBase   = `${CDN}/@ffmpeg/core@${VER.core}/dist/umd`;
-      const workerURL  = await toBlobURL(`${ffmpegBase}/worker.js`,        'text/javascript');
-      const coreURL    = await toBlobURL(`${coreBase}/ffmpeg-core.js`,     'text/javascript');
-      const wasmURL    = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`,   'application/wasm');
-      await ffmpeg.load({ coreURL, wasmURL, workerURL });
+      // classWorkerURL must be a same-origin URL: the browser blocks cross-origin
+      // module Workers under COEP even with CORS headers.  The proxy file
+      // (js/ffmpeg-worker.js) re-exports the CDN worker, which retains its own
+      // import.meta.url so its relative sibling imports resolve correctly.
+      // coreURL / wasmURL are still fetched via toBlobURL so the worker can
+      // dynamic-import and load them without any COEP restrictions.
+      const coreBase       = `${CDN}/@ffmpeg/core@${VER.core}/dist/umd`;
+      const classWorkerURL = new URL('./js/ffmpeg-worker.js', document.baseURI).href;
+      const coreURL        = await toBlobURL(`${coreBase}/ffmpeg-core.js`,   'text/javascript');
+      const wasmURL        = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm');
+      await ffmpeg.load({ classWorkerURL, coreURL, wasmURL });
 
       isLoaded = true;
       onStatus('FFmpeg ready.');

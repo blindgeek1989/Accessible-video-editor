@@ -257,7 +257,7 @@ Currently passes 15/15 checks, including:
 
 | Component | Library | Version |
 |-----------|---------|---------|
-| Video processing | @ffmpeg/ffmpeg (WASM) | 0.12.7 |
+| Video processing | @ffmpeg/ffmpeg (WASM) | 0.12.10 |
 | Speech recognition | @xenova/transformers (Whisper) | 2.17.2 |
 | Cross-origin isolation | coi-serviceworker | inline |
 
